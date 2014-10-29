@@ -33,7 +33,6 @@ tasks["maintenance"] = maintenance
 
 def reporting_percentages(user_id=-1):
     import time
-    
     time.sleep(5)
     print '50%'
     time.sleep(5)
