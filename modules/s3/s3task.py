@@ -397,45 +397,53 @@ class S3Task(object):
                                           vars=json.dumps(vars),
                                           **kwargs)
         if report_progress:
-            log_name = datetime.datetime.now().strftime("%y-%m-%d-%H-%M") + "_" + task + ".txt"
-            
+            log_name = datetime.datetime.now() \
+                .strftime("%y-%m-%d-%H-%M") + "_" + task + ".txt"
             from time import sleep
-            rt = RepeatedTimer(1, self.check_status, log_name,record.id,self.scheduler,task) # it auto-starts, no need of rt.start()
+            rt = RepeatedTimer(1, self.check_status,
+                               log_name, record.id,
+                               self.scheduler, task)
             try:
-                # While the task is running..? What if it never gets out of a QUEUED state?
-                # Every second for 10 seconds, check the task's status
+                '''
+                While the task is running..? What if it
+                never gets out of a QUEUED state?
+                Every second for 10 seconds, check
+                the task's status
+                '''
                 sleep(10)
             finally:
                 rt.stop()
-            
         return record
 
     #--------------------------------------------------------------------------
     def check_status(user_id, log_name, task_id, scheduler, task_name):
         log_path = "/home/dev/web2py/applications/eden/logs/tasks/"
-        
         from gluon import DAL, Field
-        db = DAL('sqlite://storage.db', folder='applications/eden/databases', auto_import=True)
-        
+        db = DAL('sqlite://storage.db',
+                 folder='applications/eden/databases',
+                 auto_import=True)
+
         table = db.scheduler_task
         query = (table.id == task_id)
         task_status = db(query).select(table.status).first().status
 
         '''
-        Ideally, we could use this to gather information on the task,
-        but the web2py scheduler is throwing a "cannot import name Query" module 
-        for some reason... 
-        Probably because this is in a separate thread that can't access the DAL :(
+        Ideally, we could use this to gather information
+        on the task, but the web2py scheduler is throwing
+        a "cannot import name Query" module for some reason...
+        Probably because this is in a separate thread that
+        can't access the DAL :(
         '''
-#         task_status = scheduler.task_status(task_id, output=True)  
-#         print task_status                         
-            
+        # task_status = scheduler.task_status(task_id, output=True)
+        # print task_status
+
         import os
         if not os.path.exists(log_path):
             os.makedirs(log_path)
-            
+
         with open(log_path + log_name, "a+") as log:
-            log.write('%s is currently in the %s state\n' % (task_name, task_status))
+            log.write('%s is currently in the %s state\n'
+                      % (task_name, task_status))
 
     # -------------------------------------------------------------------------
     def _duplicate_task_exists(self, task, args, vars):
