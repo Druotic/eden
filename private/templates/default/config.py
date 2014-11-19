@@ -210,7 +210,7 @@ settings.L10n.decimal_separator = "."
 # Restrict the Location Selector to just certain countries
 # NB This can also be over-ridden for specific contexts later
 # e.g. Activities filtered to those of parent Project
-#settings.gis.countries = ["US"]
+#settings.gis.countries = ("US",)
 # Uncomment to pass Addresses imported from CSV to a Geocoder to try and automate Lat/Lon
 #settings.gis.geocode_imported_addresses = "google"
 # Hide the Map-based selection tool in the Location Selector
@@ -290,7 +290,7 @@ settings.L10n.decimal_separator = "."
 # http://eden.sahanafoundation.org/wiki/UserGuidelines/Admin/MapPrinting
 #settings.gis.print_button = True
 # Uncomment to save a screenshot whenever a saved map is saved
-#settings.gis.config_screenshot = True
+#settings.gis.config_screenshot = (820, 410)
 # Uncomment to hide the Save control, or set to "float"
 #settings.gis.save = False
 # Uncomment to hide the ScaleLine control
@@ -366,6 +366,9 @@ settings.gis.geonames_username = "eden_test"
 #settings.ui.iframe_opens_full = True
 # Enable this to change the label for 'Attachments' tabs
 #settings.ui.label_attachments = "Attachments"
+# Uncomment to configure the LocationSelector labels for the Map button with Points
+#settings.label_locationselector_map_point_add = "Find on Map"
+#settings.label_locationselector_map_point_view = "Find on Map"
 # Enable this to change the label for 'Mobile Phone'
 #settings.ui.label_mobile_phone = "Cell Phone"
 # Enable this to change the label for 'Postcode'
@@ -471,8 +474,8 @@ settings.gis.geonames_username = "eden_test"
 #settings.pr.search_shows_hr_details = False
 # Uncomment to hide Emergency Contacts in Person Contacts page
 #settings.pr.show_emergency_contacts = False
-# Have 2 Tabs for Contacts: Public & private
-#settings.pr.public_private_contacts = True
+# Show separate Public and Private Contacts Tabs
+#settings.pr.contacts_tabs = ("public", "private")
 
 # -----------------------------------------------------------------------------
 # Organisations
@@ -1058,7 +1061,7 @@ settings.modules = OrderedDict([
     #   module_type = 1,
     #)),
     #("water", Storage(
-    #    name_nice = T("Flood Warnings"),
+    #    name_nice = T("Water"),
     #    #description = "Flood Gauges show water levels in various parts of the country",
     #    restricted = True,
     #    module_type = 10

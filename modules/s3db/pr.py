@@ -37,6 +37,7 @@ __all__ = ("S3PersonEntity",
            "S3PersonIdentityModel",
            "S3PersonEducationModel",
            "S3PersonDetailsModel",
+           "S3PersonTagModel",
            "S3SavedFilterModel",
            "S3SubscriptionModel",
            "S3PersonPresence",
@@ -262,7 +263,7 @@ class S3PersonEntity(S3Model):
                        #   - OU configurations (Organisation/Branch/Facility/Team)
                        gis_config = pe_id,
                        )
-                      
+
         # Reusable fields
         pr_pe_label = S3ReusableField("pe_label", length=128,
                                       label = T("ID Tag Number"),
@@ -579,14 +580,14 @@ class S3PersonEntity(S3Model):
             @param form: the CRUD form
         """
 
-        formvars = form.vars
-        if not formvars:
+        form_vars = form.vars
+        if not form_vars:
             return
-        if "role_type" in formvars:
+        if "role_type" in form_vars:
             role_id = form.record_id
             if not role_id:
                 return
-            role_type = formvars.role_type
+            role_type = form_vars.role_type
             db = current.db
             rtable = db.pr_role
             role = db(rtable.id == role_id).select(rtable.role_type,
@@ -594,7 +595,7 @@ class S3PersonEntity(S3Model):
             if role and str(role.role_type) != str(role_type):
                 # If role type has changed, then clear paths
                 if str(role_type) != str(OU):
-                    formvars["path"] = None
+                    form_vars["path"] = None
                 current.s3db.pr_role_rebuild_path(role_id, clear=True)
         return
 
@@ -635,10 +636,10 @@ class S3PersonEntity(S3Model):
             @param form: the CRUD form
         """
 
-        formvars = form.vars
-        role_id = formvars["role_id"]
-        pe_id = formvars["pe_id"]
-        record_id = formvars["id"]
+        form_vars = form.vars
+        role_id = form_vars["role_id"]
+        pe_id = form_vars["pe_id"]
+        record_id = form_vars["id"]
 
         if role_id and pe_id and record_id:
             # Remove duplicates
@@ -677,7 +678,7 @@ class S3PersonEntity(S3Model):
             return
         if record and record.deleted_fk:
             data = json.loads(record.deleted_fk)
-            pe_id = data.get("pe_id", None)
+            pe_id = data.get("pe_id")
             if pe_id:
                 current.s3db.pr_rebuild_path(pe_id, clear=True)
         return
@@ -979,26 +980,8 @@ class S3PersonModel(S3Model):
 
         # Components
         add_components(tablename,
-                       # Personal Data
-                       pr_identity = (# All Identity Documents
-                                      {"name": "identity",
-                                       "joinby": "person_id",
-                                       },
-                                      # Passports in particular
-                                      {"name": "passport",
-                                       "joinby": "person_id",
-                                       "filterby": "type",
-                                       "filterfor": (1,),
-                                       },
-                                      ),
-                       pr_education = "person_id",
-                       pr_person_details = {"joinby": "person_id",
-                                            "multiple": False,
-                                            },
-                       # Group Memberships
-                       pr_group_membership = "person_id",
-                       # Organisation Memberships
-                       member_membership = "person_id",
+                       # Assets
+                       asset_asset = "assigned_to_id",
                        # User account
                        auth_user = {"link": "pr_person_user",
                                     "joinby": "pe_id",
@@ -1006,10 +989,26 @@ class S3PersonModel(S3Model):
                                     "fkey": "id",
                                     "pkey": "pe_id",
                                     },
+                       # Shelter (Camp) Registry
+                       cr_shelter_registration = {"joinby": "person_id",
+                                                  # A person can be assigned to only one shelter
+                                                  # @todo: when fully implemented this needs to allow
+                                                  # multiple instances for tracking reasons
+                                                  "multiple": False,
+                                                  },
+                       # Evacuee Registry
+                       evr_case = {"joinby": "person_id",
+                                   "multiple": False,
+                                   },
+                       evr_medical_details = {"joinby": "person_id",
+                                              "multiple": False,
+                                              },
+                       evr_background = {"joinby": "person_id",
+                                         "multiple": False,
+                                         },
+
                        # HR Records
                        hrm_human_resource = "person_id",
-                       hrm_salary = "person_id",
-
                        # Skills
                        hrm_certification = "person_id",
                        hrm_competency = "person_id",
@@ -1026,30 +1025,38 @@ class S3PersonModel(S3Model):
                        hrm_award = {"name": "staff_award",
                                     "joinby": "person_id",
                                     },
+                       # Disciplinary Record
                        hrm_disciplinary_action = "person_id",
+                       # Salary Information
+                       hrm_salary = "person_id",
+                       # Organisation Memberships
+                       member_membership = "person_id",
+                       # Education history
+                       pr_education = "person_id",
+                       # Group Memberships
+                       pr_group_membership = "person_id",
+                       # Identity Documents
+                       pr_identity = (# All Identity Documents
+                                      {"name": "identity",
+                                       "joinby": "person_id",
+                                       },
+                                      # Passports in particular
+                                      {"name": "passport",
+                                       "joinby": "person_id",
+                                       "filterby": "type",
+                                       "filterfor": (1,),
+                                       },
+                                      ),
+                       # Personal Details
+                       pr_person_details = {"joinby": "person_id",
+                                            "multiple": False,
+                                            },
+                       # Tags
+                       pr_person_tag = "person_id",
+                       # Volunteer Awards
                        vol_volunteer_award = {"name": "award",
                                               "joinby": "person_id",
                                               },
-                       # Assets
-                       asset_asset = "assigned_to_id",
-
-                       # Evacuee Registry
-                       evr_case = {"joinby": "person_id",
-                                   "multiple": False,
-                                   },
-                       evr_medical_details = {"joinby": "person_id",
-                                              "multiple": False,
-                                              },
-                       evr_background = {"joinby": "person_id",
-                                         "multiple": False,
-                                         },
-                       # Shelter (Camp) Registry
-                       cr_shelter_registration = {"joinby": "person_id",
-                                                  # A person can be assigned to only one shelter
-                                                  # @todo: when fully implemented this needs to allow
-                                                  # multiple instances for tracking reasons
-                                                  "multiple": False,
-                                                  },
                        )
 
         # ---------------------------------------------------------------------
@@ -1067,7 +1074,7 @@ class S3PersonModel(S3Model):
     def pr_person_age(cls, row):
         """
             Virtual Field to display the Age of a person
-            
+
             @param row: a Row containing the person record
         """
 
@@ -1125,7 +1132,7 @@ class S3PersonModel(S3Model):
             return relativedelta(current.request.utcnow.date(), dob).years
         else:
             return None
-            
+
     # -------------------------------------------------------------------------
     @staticmethod
     def pr_person_onaccept(form):
@@ -1173,16 +1180,16 @@ class S3PersonModel(S3Model):
 
         # Mandatory data
         data = item.data
-        fname = data.get("first_name", None)
-        mname = data.get("middle_name", None)
-        lname = data.get("last_name", None)
+        fname = data.get("first_name")
+        mname = data.get("middle_name")
+        lname = data.get("last_name")
         if fname:
             fname = fname.lower()
         if mname:
             mname = mname.lower()
         if lname:
             lname = lname.lower()
-        initials = data.get("initials", None)
+        initials = data.get("initials")
         if initials:
             initials = initials.lower()
 
@@ -1196,20 +1203,20 @@ class S3PersonModel(S3Model):
             return
 
         # Optional extra data
-        dob = data.get("date_of_birth", None)
+        dob = data.get("date_of_birth")
         email = sms = None
         id = {}
         for citem in item.components:
             if citem.tablename == "pr_contact":
                 data = citem.data
-                if data.get("contact_method", None) == "EMAIL":
+                if data.get("contact_method") == "EMAIL":
                     email = data.value
-                elif data.get("contact_method", None) == "SMS":
+                elif data.get("contact_method") == "SMS":
                     sms = data.value
             elif citem.tablename == "pr_identity":
                 data = citem.data
-                id_type = data.get("type", None)
-                id_value = data.get("value", None)
+                id_type = data.get("type")
+                id_value = data.get("value")
                 if id_type and id_value:
                     id[id_type] = id_value
 
@@ -1618,7 +1625,7 @@ class S3PersonModel(S3Model):
 
         resource = r.resource
         resource.add_filter(query)
-        
+
         fields = ["id",
                   "first_name",
                   "middle_name",
@@ -1737,7 +1744,7 @@ class S3PersonModel(S3Model):
                            )
             name = s3_fullname(name)
             item = {"id"     : row["pr_person.id"],
-                    "name"   : name, 
+                    "name"   : name,
                     }
             date_of_birth = row.get("pr_person.date_of_birth", None)
             if date_of_birth:
@@ -1795,7 +1802,7 @@ class S3GroupModel(S3Model):
         NONE = messages["NONE"]
 
         # ---------------------------------------------------------------------
-        # Hard Coded Group types. Add/Comment entries, but don't remove! 
+        # Hard Coded Group types. Add/Comment entries, but don't remove!
         #
         pr_group_types = {1 : T("Family"),
                           2 : T("Tourist Group"),
@@ -1912,7 +1919,7 @@ class S3GroupModel(S3Model):
         # Components
         self.add_components(tablename,
                             pr_group_membership = "group_id",
-                            
+
                             # Shelter (Camp) Registry
                             cr_shelter_allocation = {"joinby": "group_id",
                                                      # A group can be assigned to only one shelter
@@ -2010,18 +2017,16 @@ class S3GroupModel(S3Model):
     def group_deduplicate(item):
         """ Group de-duplication """
 
-        if item.tablename == "pr_group":
-            table = item.table
-            name = item.data.get("name", None)
+        name = item.data.get("name")
 
-            query = (table.name == name) & \
-                    (table.deleted != True)
-            duplicate = current.db(query).select(table.id,
-                                                 limitby=(0, 1)).first()
-            if duplicate:
-                item.id = duplicate.id
-                item.method = item.METHOD.UPDATE
-        return
+        table = item.table
+        query = (table.name == name) & \
+                (table.deleted != True)
+        duplicate = current.db(query).select(table.id,
+                                             limitby=(0, 1)).first()
+        if duplicate:
+            item.id = duplicate.id
+            item.method = item.METHOD.UPDATE
 
     # -------------------------------------------------------------------------
     @staticmethod
@@ -2218,13 +2223,13 @@ class S3ContactModel(S3Model):
     def pr_contact_onvalidation(form):
         """ Contact form validation """
 
-        formvars = form.vars
+        form_vars = form.vars
 
         # Get the contact method
-        contact_method = formvars.contact_method
-        if not contact_method and "id" in formvars:
+        contact_method = form_vars.contact_method
+        if not contact_method and "id" in form_vars:
             ctable = current.s3db.pr_contact
-            record = current.db(ctable._id == formvars.id).select(
+            record = current.db(ctable._id == form_vars.id).select(
                                 ctable.contact_method,
                                 limitby=(0, 1)).first()
             if record:
@@ -2235,21 +2240,20 @@ class S3ContactModel(S3Model):
             requires = IS_EMAIL(error_message = current.T("Enter a valid email"))
         elif contact_method == "SMS":
             requires = IS_PHONE_NUMBER(international = True)
-        elif contact_method in ("SMS", "HOME_PHONE", "WORK_PHONE"):
+        elif contact_method in ("HOME_PHONE", "WORK_PHONE"):
             requires = IS_MATCH(multi_phone_number_pattern,
                                 error_message = current.T("Enter a valid phone number"))
         else:
             requires = None
 
         # Validate the value
-        value = formvars.value
         if requires:
-            value, error = requires(value)
+            value, error = requires(form_vars.value)
             if error:
                 form.errors.value = error
             else:
-                formvars.value = value
-                
+                form_vars.value = value
+
         return
 
     # -------------------------------------------------------------------------
@@ -2257,26 +2261,24 @@ class S3ContactModel(S3Model):
     def pr_contact_deduplicate(item):
         """ Contact information de-duplication """
 
-        if item.tablename == "pr_contact":
-            data = item.data
-            pe_id = data.get("pe_id", None)
+        data = item.data
+        pe_id = data.get("pe_id")
+        if pe_id is None:
+            return
 
-            if pe_id is None:
-                return
+        table = item.table
+        contact_method = data.get("contact_method")
+        value = data.get("value")
 
-            table = item.table
-            contact_method = data.get("contact_method", None)
-            value = data.get("value", None)
-
-            query = (table.pe_id == pe_id) & \
-                    (table.contact_method == contact_method) & \
-                    (table.value == value) & \
-                    (table.deleted != True)
-            duplicate = current.db(query).select(table.id,
-                                                 limitby=(0, 1)).first()
-            if duplicate:
-                item.id = duplicate.id
-                item.method = item.METHOD.UPDATE
+        query = (table.pe_id == pe_id) & \
+                (table.contact_method == contact_method) & \
+                (table.value == value) & \
+                (table.deleted != True)
+        duplicate = current.db(query).select(table.id,
+                                             limitby=(0, 1)).first()
+        if duplicate:
+            item.id = duplicate.id
+            item.method = item.METHOD.UPDATE
 
     # -------------------------------------------------------------------------
     @staticmethod
@@ -2286,19 +2288,18 @@ class S3ContactModel(S3Model):
             - currently only 1 of these expected per person
         """
 
-        if item.tablename == "pr_contact_emergency":
-            pe_id = item.data.get("pe_id", None)
-            if pe_id is None:
-                return
+        pe_id = item.data.get("pe_id")
+        if pe_id is None:
+            return
 
-            table = item.table
-            query = (table.pe_id == pe_id) & \
-                    (table.deleted != True)
-            duplicate = current.db(query).select(table.id,
-                                                 limitby=(0, 1)).first()
-            if duplicate:
-                item.id = duplicate.id
-                item.method = item.METHOD.UPDATE
+        table = item.table
+        query = (table.pe_id == pe_id) & \
+                (table.deleted != True)
+        duplicate = current.db(query).select(table.id,
+                                             limitby=(0, 1)).first()
+        if duplicate:
+            item.id = duplicate.id
+            item.method = item.METHOD.UPDATE
 
 # =============================================================================
 class S3AddressModel(S3Model):
@@ -2360,7 +2361,7 @@ class S3AddressModel(S3Model):
 
         # Which levels of Hierarchy are we using?
         levels = current.gis.get_relevant_hierarchy_levels()
-        
+
         # Display in reverse order, like Addresses
         levels.reverse()
 
@@ -2502,25 +2503,23 @@ class S3AddressModel(S3Model):
     def pr_address_deduplicate(item):
         """ Address de-duplication """
 
-        if item.tablename == "pr_address":
-            data = item.data
-            pe_id = data.get("pe_id", None)
+        data = item.data
+        pe_id = data.get("pe_id")
+        if pe_id is None:
+            return
 
-            if pe_id is None:
-                return
-
-            type = data.get("type", None)
-            location_id = data.get("location_id", None)
-            table = item.table
-            query = (table.pe_id == pe_id) & \
-                    (table.type == type) & \
-                    (table.location_id == location_id) & \
-                    (table.deleted != True)
-            duplicate = current.db(query).select(table.id,
-                                                 limitby=(0, 1)).first()
-            if duplicate:
-                item.id = duplicate.id
-                item.method = item.METHOD.UPDATE
+        type = data.get("type")
+        location_id = data.get("location_id")
+        table = item.table
+        query = (table.pe_id == pe_id) & \
+                (table.type == type) & \
+                (table.location_id == location_id) & \
+                (table.deleted != True)
+        duplicate = current.db(query).select(table.id,
+                                             limitby=(0, 1)).first()
+        if duplicate:
+            item.id = duplicate.id
+            item.method = item.METHOD.UPDATE
 
 # =============================================================================
 class S3PersonImageModel(S3Model):
@@ -2582,7 +2581,7 @@ class S3PersonImageModel(S3Model):
 
         # @todo: make lazy_table
         table = db[tablename]
-        
+
         def get_file():
             """ Callback to return the file field for our record """
             if len(current.request.args) < 3:
@@ -2917,26 +2916,25 @@ class S3PersonIdentityModel(S3Model):
     def pr_identity_deduplicate(item):
         """ Identity de-duplication """
 
-        if item.tablename == "pr_identity":
-            data = item.data
-            person_id = data.get("person_id", None)
-            if person_id is None:
-                return
+        data = item.data
+        person_id = data.get("person_id")
+        if person_id is None:
+            return
 
-            id_type = data.get("type", None)
-            # People can have 1 more than 1 'Other', or even Passport
-            # - so this cannot be used to update the Number, only update comments
-            id_value = data.get("value", None)
-            table = item.table
-            query = (table.person_id == person_id) & \
-                    (table.type == id_type) & \
-                    (table.value == id_value) & \
-                    (table.deleted != True)
-            duplicate = current.db(query).select(table.id,
-                                                 limitby=(0, 1)).first()
-            if duplicate:
-                item.id = duplicate.id
-                item.method = item.METHOD.UPDATE
+        id_type = data.get("type")
+        # People can have 1 more than 1 'Other', or even Passport
+        # - so this cannot be used to update the Number, only update comments
+        id_value = data.get("value")
+        table = item.table
+        query = (table.person_id == person_id) & \
+                (table.type == id_type) & \
+                (table.value == id_value) & \
+                (table.deleted != True)
+        duplicate = current.db(query).select(table.id,
+                                             limitby=(0, 1)).first()
+        if duplicate:
+            item.id = duplicate.id
+            item.method = item.METHOD.UPDATE
 
 # =============================================================================
 class S3PersonEducationModel(S3Model):
@@ -3075,28 +3073,27 @@ class S3PersonEducationModel(S3Model):
     def pr_education_deduplicate(item):
         """ Education de-duplication """
 
-        if item.tablename == "pr_education":
-            data = item.data
-            person_id = data.get("person_id", None)
-            if person_id is None:
-                return
+        data = item.data
+        person_id = data.get("person_id")
+        if person_id is None:
+            return
 
-            level = data.get("level", None)
-            award = data.get("award", None)
-            year = data.get("year", None)
-            institute = data.get("institute", None)
-            table = item.table
-            query = (table.person_id == person_id) & \
-                    (table.level == level) & \
-                    (table.award == award) & \
-                    (table.year == year) & \
-                    (table.institute == institute) & \
-                    (table.deleted != True)
-            duplicate = current.db(query).select(table.id,
-                                                 limitby=(0, 1)).first()
-            if duplicate:
-                item.id = duplicate.id
-                item.method = item.METHOD.UPDATE
+        level = data.get("level")
+        award = data.get("award")
+        year = data.get("year")
+        institute = data.get("institute")
+        table = item.table
+        query = (table.person_id == person_id) & \
+                (table.level == level) & \
+                (table.award == award) & \
+                (table.year == year) & \
+                (table.institute == institute) & \
+                (table.deleted != True)
+        duplicate = current.db(query).select(table.id,
+                                             limitby=(0, 1)).first()
+        if duplicate:
+            item.id = duplicate.id
+            item.method = item.METHOD.UPDATE
 
 # =============================================================================
 class S3PersonDetailsModel(S3Model):
@@ -3153,6 +3150,12 @@ class S3PersonDetailsModel(S3Model):
                                 ),
                           Field("place_of_birth",
                                 label = T("Place of Birth"),
+                                # Enable as-required in template
+                                readable = False,
+                                writable = False,
+                                ),
+                          Field("hometown",
+                                label = T("Home Town"),
                                 # Enable as-required in template
                                 readable = False,
                                 writable = False,
@@ -3219,19 +3222,74 @@ class S3PersonDetailsModel(S3Model):
             - only 1 of these expected per person
         """
 
-        if item.tablename == "pr_person_details":
-            person_id = item.data.get("person_id", None)
-            if person_id is None:
-                return
+        person_id = item.data.get("person_id")
+        if person_id is None:
+            return
 
-            table = item.table
-            query = (table.person_id == person_id) & \
-                    (table.deleted != True)
-            duplicate = current.db(query).select(table.id,
-                                                 limitby=(0, 1)).first()
-            if duplicate:
-                item.id = duplicate.id
-                item.method = item.METHOD.UPDATE
+        table = item.table
+        query = (table.person_id == person_id) & \
+                (table.deleted != True)
+        duplicate = current.db(query).select(table.id,
+                                             limitby=(0, 1)).first()
+        if duplicate:
+            item.id = duplicate.id
+            item.method = item.METHOD.UPDATE
+
+# =============================================================================
+class S3PersonTagModel(S3Model):
+    """ Key-Value store for person records """
+
+    names = ("pr_person_tag",
+             )
+
+    def model(self):
+
+        T = current.T
+
+        tablename = "pr_person_tag"
+        self.define_table(tablename,
+                          self.pr_person_id(empty = False,
+                                         ondelete = "CASCADE",
+                                         ),
+                          Field("tag",
+                                label = T("Key"),
+                                ),
+                          Field("value",
+                                label = T("Value"),
+                                ),
+                          #s3_comments(),
+                          *s3_meta_fields())
+
+        self.configure(tablename,
+                       deduplicate = self.person_tag_duplicate,
+                       )
+
+        return {}
+
+    # -------------------------------------------------------------------------
+    @staticmethod
+    def person_tag_duplicate(item):
+        """
+            Update detection for pr_person_tag
+
+            @param item: the S3ImportItem
+        """
+
+        data = item.data
+        tag = data.get("tag")
+        person_id = data.get("person_id")
+        if not tag or not person_id:
+            return
+
+        table = item.table
+        query = (table.person_id == person_id) & \
+                (table.tag.lower() == tag.lower())
+
+        duplicate = current.db(query).select(table.id,
+                                             limitby=(0, 1)).first()
+        if duplicate:
+            item.id = duplicate.id
+            item.method = item.METHOD.UPDATE
 
 # =============================================================================
 class S3SavedFilterModel(S3Model):
@@ -3300,7 +3358,7 @@ class S3SavedFilterModel(S3Model):
             query = query.replace("'", "\"")
             try:
                 json.loads(query)
-            except ValueError, e: 
+            except ValueError, e:
                 form.errors.query = "%s: %s" % (current.T("Query invalid"), e)
             form.vars.query = query
 
@@ -4346,7 +4404,7 @@ class pr_RoleRepresent(S3Represent):
                  translate=True):
         """
             Constructor
-            
+
             @param show_link: whether to add a URL to representations
             @param multiple: web2py list-type (all values will be lists)
             @param translate: translate all representations (using T)
@@ -4485,14 +4543,14 @@ class pr_PersonEntityRepresent(S3Represent):
         instance_fields = {
             "pr_person": ["first_name", "middle_name", "last_name"],
         }
-        
+
         # Get all super-entity rows
         etable = s3db.pr_pentity
         rows = db(key.belongs(values)).select(key,
                                               etable.pe_label,
                                               etable.instance_type)
         self.queries += 1
-        
+
         keyname = key.name
         types = {}
         for row in rows:
@@ -4524,7 +4582,7 @@ class pr_PersonEntityRepresent(S3Represent):
             query = (table[keyname].belongs(types[instance_type].keys()))
             rows = db(query).select(*fields)
             self.queries += 1
-            
+
             sdata = types[instance_type]
             for row in rows:
                 # Construct a new Row which contains both, the super-entity
@@ -5933,7 +5991,7 @@ def pr_descendants(pe_ids, skip=None, root=True):
     ogetattr = object.__getattribute__
 
     result = dict()
-    
+
     skip.update(pe_ids)
     for row in rows:
 

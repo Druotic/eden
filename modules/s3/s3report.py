@@ -215,6 +215,7 @@ class S3Report(S3Method):
                                                  widget_id = widget_id)
 
             output["title"] = self.crud_string(tablename, "title_report")
+            output["report_type"] = "pivottable"
 
             # Detect and store theme-specific inner layout
             self._view(r, "pivottable.html")
@@ -693,7 +694,7 @@ class S3ReportForm(object):
             script = "/%s/static/scripts/d3/nv.d3.js" % appname
             if script not in scripts:
                 scripts.append(script)
-            script = "/%s/static/scripts/S3/s3.jquery.ui.pivottable.js" % appname
+            script = "/%s/static/scripts/S3/s3.ui.pivottable.js" % appname
             if script not in scripts:
                 scripts.append(script)
         else:

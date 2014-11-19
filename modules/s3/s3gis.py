@@ -249,6 +249,12 @@ class GIS(object):
         GeoSpatial functions
     """
 
+    # Used to disable location tree updates during prepopulate.
+    # It is not appropriate to use auth.override for this, as there are times
+    # (e.g. during tests) when auth.override is turned on, but location tree
+    # updates should still be enabled.
+    disable_update_location_tree = False
+
     def __init__(self):
         messages = current.messages
         #messages.centroid_error = str(A("Shapely", _href="http://pypi.python.org/pypi/Shapely/", _target="_blank")) + " library not found, so can't find centroid!"
@@ -260,7 +266,7 @@ class GIS(object):
         messages.lat_empty = "Invalid: Latitude can't be empty if Longitude specified!"
         messages.unknown_parent = "Invalid: %(parent_id)s is not a known Location"
         self.DEFAULT_SYMBOL = "White Dot"
-        self.hierarchy_level_keys = ["L0", "L1", "L2", "L3", "L4", "L5"]
+        self.hierarchy_level_keys = ("L0", "L1", "L2", "L3", "L4", "L5")
         self.hierarchy_levels = {}
         self.max_allowed_level_num = 4
 
@@ -743,6 +749,7 @@ class GIS(object):
                         shape = wkt_loads(row.wkt)
                         ok = test.intersects(shape)
                         if ok:
+                            print "Level: %s, id: %s" % (row.level, row.id)
                             results[row.level] = row.id
         return results
 
@@ -1339,29 +1346,44 @@ class GIS(object):
 
         # If no id supplied, extend the site config with any personal or OU configs
         if not rows and not row:
-            # Read personalised config, if available.
             auth = current.auth
             if auth.is_logged_in():
+                # Read personalised config, if available.
                 user = auth.user
                 pe_id = user.pe_id
-                # OU configs
-                # List of roles to check (in order)
-                roles = ("Staff", "Volunteer")
-                role_paths = s3db.pr_get_role_paths(pe_id, roles=roles)
-                # Unordered list of PEs
-                pes = ()
-                for role in roles:
-                    if role in role_paths:
-                        # @ToDo: Allow selection of which OU a person's config should inherit from for disambiguation
-                        # - store in s3db.gis_config?
-                        # - needs a method in gis_config_form_setup() to populate the dropdown from the OUs (in this person's Path for this person's,  would have to be a dynamic lookup for Admins)
-                        pes = role_paths[role].nodes()
-                        # Staff don't check Volunteer's OUs
-                        break
-                if current.deployment_settings.get_auth_registration_requests_organisation_group() and \
-                   user.org_group_id:
-                    # Add the user account's Org Group the list
-                    # (Will take lower-priority than Site/Org)
+                # Also look for OU configs
+                pes = []
+                if user.organisation_id:
+                    # Add the user account's Org to the list
+                    # (Will take lower-priority than Personal)
+                    otable = s3db.org_organisation
+                    org = db(otable.id == user.organisation_id).select(otable.pe_id,
+                                                                       limitby=(0, 1)
+                                                                       ).first()
+                    try:
+                        pes.append(org.pe_id)
+                    except:
+                        current.log.warning("Unable to find Org %s" % user.organisation_id)
+                    if current.deployment_settings.get_org_branches():
+                        # Also look for Parent Orgs
+                        ancestors = s3db.pr_get_ancestors(org.pe_id)
+                        pes += ancestors
+
+                if user.site_id:
+                    # Add the user account's Site to the list
+                    # (Will take lower-priority than Org/Personal)
+                    stable = s3db.org_site
+                    site = db(stable.site_id == user.site_id).select(stable.pe_id,
+                                                                     limitby=(0, 1)
+                                                                     ).first()
+                    try:
+                        pes.append(site.pe_id)
+                    except:
+                        current.log.warning("Unable to find Site %s" % user.site_id)
+
+                if user.org_group_id:
+                    # Add the user account's Org Group to the list
+                    # (Will take lower-priority than Site/Org/Personal)
                     ogtable = s3db.org_group
                     ogroup = db(ogtable.id == user.org_group_id).select(ogtable.pe_id,
                                                                         limitby=(0, 1)
@@ -1375,19 +1397,19 @@ class GIS(object):
                 query = (ctable.uuid == "SITE_DEFAULT") | \
                         ((ctable.pe_id == pe_id) & \
                          (ctable.pe_default != False))
-                len_pes = len(pes)
-                if len_pes == 1:
+                if len(pes) == 1:
                     query |= (ctable.pe_id == pes[0])
-                elif len_pes:
+                else:
                     query |= (ctable.pe_id.belongs(pes))
-                # Personal may well not be complete, so Left Join
+                # Personal/OU may well not be complete, so Left Join
                 left = (ptable.on(ptable.id == ctable.projection_id),
                         stable.on((stable.config_id == ctable.id) & \
                                   (stable.layer_id == None)),
                         mtable.on(mtable.id == stable.marker_id),
                         )
                 # Order by pe_type (defined in gis_config)
-                # @ToDo: Do this purely from the hierarchy
+                # @ToDo: Sort orgs from the hierarchy?
+                # (Currently we just have branch > non-branch in pe_type)
                 rows = db(query).select(*fields,
                                         left=left,
                                         orderby=ctable.pe_type)
@@ -2739,7 +2761,7 @@ class GIS(object):
 
     # -------------------------------------------------------------------------
     @staticmethod
-    def get_screenshot(config_id):
+    def get_screenshot(config_id, temp=True, height=None, width=None):
         """
             Save a Screenshot of a saved map
 
@@ -2753,85 +2775,139 @@ class GIS(object):
         # @ToDo: allow selection of map_id
         map_id = "default_map"
 
-        from selenium import webdriver
-        from selenium.common.exceptions import WebDriverException
+        #from selenium import webdriver
+        # Custom version which is patched to access native PhantomJS functions added to GhostDriver/PhantomJS in:
+        # https://github.com/watsonmw/ghostdriver/commit/d9b65ed014ed9ff8a5e852cc40e59a0fd66d0cf1
+        from webdriver import WebDriver
+        from selenium.common.exceptions import TimeoutException, WebDriverException
         from selenium.webdriver.support.ui import WebDriverWait
 
         request = current.request
-        response = current.response
 
-        driver = webdriver.PhantomJS()
-
-        # Set the size of the browser to match the map
-        settings = current.deployment_settings
-        height = settings.get_gis_map_height()
-        width = settings.get_gis_map_width()
-        driver.set_window_size(width, height)
-
-        # Load the homepage
-        # (Cookie needs to be set on same domain as it takes effect)
-        public_url = settings.get_base_public_url()
-        appname = request.application
-        url = "%s/%s" % (public_url, appname)
-        driver.get(url)
-
-        # Reuse current session to allow access to ACL-controlled resources
-        session_id = response.session_id
-        driver.add_cookie({"name":  response.session_id_name,
-                           "value": session_id,
-                           "path":  "/",
-                           })
-        # For sync connections
-        current.session._unlock(response)
-
-        # Load the map
-        url = "%s/%s/gis/map_viewing_client?print=1&config=%s" % (public_url, appname, config_id)
-        driver.get(url)
-
-        # Wait for map to load
-        # @ToDo: Also need to catch layers (use throbber?)
-        def map_loaded(driver):
-            try:
-                return driver.execute_script('''return S3.gis.maps['%s'].s3.loaded;''' % map_id)
-            except WebDriverException:
-                return False
-
-        WebDriverWait(driver, 10).until(map_loaded)
-
-        # Save the Output
-        # @ToDo: Can we use StringIO instead of cluttering filesystem?
-        # @ToDo: Allow option of PDF (as well as PNG)
-        cachepath = os.path.join(request.folder, "static", "cache", "png")
+        cachepath = os.path.join(request.folder, "static", "cache", "jpg")
 
         if not os.path.exists(cachepath):
             try:
                 os.mkdir(cachepath)
             except OSError, os_error:
-                error = "GIS: PNG files cannot be saved: %s %s" % \
+                error = "GIS: JPEG files cannot be saved: %s %s" % \
                                   (cachepath, os_error)
                 current.log.error(error)
                 current.session.error = error
                 redirect(URL(c="gis", f="index", vars={"config_id": config_id}))
 
-        driver.save_screenshot(os.path.join(cachepath, "%s.png" % session_id))
+        # Copy the current working directory to revert back to later
+        cwd = os.getcwd()
+        # Change to the Cache folder (can't render directly there from execute_phantomjs)
+        os.chdir(cachepath)
+
+        #driver = webdriver.PhantomJS()
+        driver = WebDriver()
+
+        # Change back for other parts
+        os.chdir(cwd)
+
+        settings = current.deployment_settings
+        if height is None:
+            # Set the size of the browser to match the map
+            height = settings.get_gis_map_height()
+        if width is None:
+            width = settings.get_gis_map_width()
+        driver.set_window_size(width + 5, height + 20)
+
+        # Load the homepage
+        # (Cookie needs to be set on same domain as it takes effect)
+        base_url = "%s/%s" % (settings.get_base_public_url(),
+                              request.application)
+        driver.get(base_url)
+
+        if not current.auth.override:
+            # Reuse current session to allow access to ACL-controlled resources
+            response = current.response
+            session_id = response.session_id
+            driver.add_cookie({"name":  response.session_id_name,
+                               "value": session_id,
+                               "path":  "/",
+                               })
+            # For sync connections
+            current.session._unlock(response)
+
+        # Load the map
+        url = "%s/gis/map_viewing_client?print=1&config=%s" % (base_url,
+                                                               config_id)
+        driver.get(url)
+
+        # Wait for map to load (including it's layers)
+        def map_loaded(driver):
+            test = '''return S3.gis.maps['%s'].s3.loaded''' % map_id
+            try:
+                return driver.execute_script(test)
+            except WebDriverException:
+                return False
+
+        try:
+            WebDriverWait(driver, 10).until(map_loaded)
+        except TimeoutException, e:
+            driver.quit()
+            current.log.error(e)
+            return None
+
+        # Save the Output
+        # @ToDo: Can we use StringIO instead of cluttering filesystem?
+        # @ToDo: Allow option of PDF (as well as JPG)
+        # https://github.com/ariya/phantomjs/blob/master/examples/rasterize.js
+        if temp:
+            filename = "%s.jpg" % session_id
+        else:
+            filename = "config_%s.jpg" % config_id
+
+        # Cannot control file size (no access to clipRect) or file format
+        #driver.save_screenshot(os.path.join(cachepath, filename))
+
+        #driver.page.clipRect = {"top": 10,
+        #                        "left": 5,
+        #                        "width": width,
+        #                        "height": height
+        #                        }
+        #driver.page.render(filename, {"format": "jpeg", "quality": "90"})
+
+        script = '''
+var page = this;
+page.clipRect = {top: 10,
+                 left: 5,
+                 width: %(width)s,
+                 height: %(height)s
+                 };
+page.render('%(filename)s', {format: 'jpeg', quality: '90'});''' % \
+                    dict(width = width,
+                         height = height,
+                         filename = filename,
+                         )
+        try:
+            result = driver.execute_phantomjs(script)
+        except WebDriverException, e:
+            driver.quit()
+            current.log.error(e)
+            return None
+
         driver.quit()
 
-        # If this was a temporary config for creating the screenshot, then delete it now
-        ctable = current.s3db.gis_config
-        set = current.db(ctable.id == config_id)
-        config = set.select(ctable.temp,
-                            limitby=(0, 1)
-                            ).first()
-        try:
-            if config.temp:
-                set.delete()
-        except:
-            # Record not found?
-            pass
+        if temp:
+            # This was a temporary config for creating the screenshot, then delete it now
+            ctable = current.s3db.gis_config
+            the_set = current.db(ctable.id == config_id)
+            config = the_set.select(ctable.temp,
+                                    limitby=(0, 1)
+                                    ).first()
+            try:
+                if config.temp:
+                    the_set.delete()
+            except:
+                # Record not found?
+                pass
 
         # Pass the result back to the User
-        redirect(URL(c="static", f="cache",
-                     args=["png", "%s.png" % session_id]))
+        return filename
 
     # -------------------------------------------------------------------------
     @staticmethod
@@ -4438,12 +4514,6 @@ class GIS(object):
         return res
 
     # -------------------------------------------------------------------------
-    # Used to disable location tree updates during prepopulate.
-    # It is not appropriate to use auth.override for this, as there are times
-    # (e.g. during tests) when auth.override is turned on, but location tree
-    # updates should still be enabled.
-    disable_update_location_tree = False
-
     @staticmethod
     def update_location_tree(feature=None, all_locations=False):
         """
@@ -4532,7 +4602,7 @@ class GIS(object):
                     current.log.error("S3GIS: Unable to set bounds & centroid for feature %s: MemoryError" % feature.id)
 
         # ---------------------------------------------------------------------
-        def propagate(parent, all_locations=False):
+        def propagate(parent):
             """
                 Propagate Lat/Lon down to any Features which inherit from this one
 
@@ -4541,24 +4611,12 @@ class GIS(object):
                 this is an update of the whole tree
             """
 
-            # During a whole tree update, the levels are processed in order
-            # from L0 down through specific locations with no level.  Since
-            # all locations will be processed eventually, processing children
-            # is not needed. Note a whole tree update may occur after
-            # prepopulate, during normal operation, if import_admin_areas is
-            # used. (Note this assumes only hierarchy locations can be parents,
-            # else children among specific locations could be processed in any
-            # order, and the "parents before children" assumption would not
-            # hold.)
-            if all_locations:
-                return
-
             query = (table.parent == parent) & \
                     (table.inherited == True)
             rows = db(query).select(*fields)
             for row in rows:
                 try:
-                    update_location_tree(row) # all_locations is False here
+                    update_location_tree(row)
                 except RuntimeError:
                     current.log.error("Cannot propagate inherited latlon to child %s of location ID %s: too much recursion" % \
                         (row.id, parent))
@@ -4656,8 +4714,9 @@ class GIS(object):
                 feature.update(**fix_vars)
                 fixup(feature)
 
-            # Ensure that any locations which inherit their latlon from this one get updated
-            propagate(id, all_locations)
+            if not all_locations:
+                # Ensure that any locations which inherit their latlon from this one get updated
+                propagate(id)
 
             return path
 
@@ -4738,8 +4797,9 @@ class GIS(object):
                 feature.update(**fix_vars)
                 fixup(feature)
 
-            # Ensure that any locations which inherit their latlon from this one get updated
-            propagate(id, all_locations)
+            if not all_locations:
+                # Ensure that any locations which inherit their latlon from this one get updated
+                propagate(id)
 
             return _path
 
@@ -4840,8 +4900,9 @@ class GIS(object):
                 feature.update(**fix_vars)
                 fixup(feature)
 
-            # Ensure that any locations which inherit their latlon from this one get updated
-            propagate(id, all_locations)
+            if not all_locations:
+                # Ensure that any locations which inherit their latlon from this one get updated
+                propagate(id)
 
             return _path
 
@@ -4976,8 +5037,9 @@ class GIS(object):
                 feature.update(**fix_vars)
                 fixup(feature)
 
-            # Ensure that any locations which inherit their latlon from this one get updated
-            propagate(id, all_locations)
+            if not all_locations:
+                # Ensure that any locations which inherit their latlon from this one get updated
+                propagate(id)
 
             return _path
 
@@ -5142,8 +5204,9 @@ class GIS(object):
                 feature.update(**fix_vars)
                 fixup(feature)
 
-            # Ensure that any locations which inherit their latlon from this one get updated
-            propagate(id, all_locations)
+            if not all_locations:
+                # Ensure that any locations which inherit their latlon from this one get updated
+                propagate(id)
 
             return _path
 
@@ -5342,8 +5405,9 @@ class GIS(object):
                 feature.update(**fix_vars)
                 fixup(feature)
 
-            # Ensure that any locations which inherit their latlon from this one get updated
-            propagate(id, all_locations)
+            if not all_locations:
+                # Ensure that any locations which inherit their latlon from this one get updated
+                propagate(id)
 
             return _path
 
@@ -5565,8 +5629,9 @@ class GIS(object):
             feature.update(**fix_vars)
             fixup(feature)
 
-        # Ensure that any locations which inherit their latlon from this one get updated
-        propagate(id, all_locations)
+        if not all_locations:
+            # Ensure that any locations which inherit their latlon from this one get updated
+            propagate(id)
 
         return _path
 
@@ -7641,10 +7706,6 @@ class LayerCoordinate(Layer):
     def as_dict(self, options=None):
         sublayers = self.sublayers
         if sublayers:
-            if current.response.s3.debug:
-                self.scripts.append("gis/cdauth.js")
-            else:
-                self.scripts.append("gis/cdauth.min.js")
             sublayer = sublayers[0]
             name_safe = re.sub("'", "", sublayer.name)
             ldict = dict(name = name_safe,
@@ -7957,7 +8018,7 @@ class LayerGoogle(Layer):
                 if sublayer.type == "earth":
                     ldict["Earth"] = str(T("Switch to 3D"))
                     #{"modules":[{"name":"earth","version":"1"}]}
-                    script = "http://www.google.com/jsapi?key=" + apikey + "&autoload=%7B%22modules%22%3A%5B%7B%22name%22%3A%22earth%22%2C%22version%22%3A%221%22%7D%5D%7D"
+                    script = "//www.google.com/jsapi?key=" + apikey + "&autoload=%7B%22modules%22%3A%5B%7B%22name%22%3A%22earth%22%2C%22version%22%3A%221%22%7D%5D%7D"
                     if script not in s3_scripts:
                         s3_scripts.append(script)
                     # Dynamic Loading not supported: https://developers.google.com/loader/#Dynamic
@@ -7998,12 +8059,12 @@ class LayerGoogle(Layer):
                 # Need to use v2 API
                 # This should be able to be fixed in OpenLayers now since Google have fixed in v3 API:
                 # http://code.google.com/p/gmaps-api-issues/issues/detail?id=2349#c47
-                script = "http://maps.google.com/maps?file=api&v=2&key=%s" % apikey
+                script = "//maps.google.com/maps?file=api&v=2&key=%s" % apikey
                 if script not in s3_scripts:
                     s3_scripts.append(script)
             else:
                 # v3 API (3.16 is frozen, 3.17 release & 3.18 is nightly)
-                script = "http://maps.google.com/maps/api/js?v=3.17&sensor=false"
+                script = "//maps.google.com/maps/api/js?v=3.17&sensor=false"
                 if script not in s3_scripts:
                     s3_scripts.append(script)
                 if "StreetviewButton" in ldict:

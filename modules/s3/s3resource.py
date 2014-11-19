@@ -615,7 +615,6 @@ class S3Resource(object):
         """
 
         s3db = current.s3db
-
         # Reset error
         self.error = None
 
@@ -668,7 +667,14 @@ class S3Resource(object):
         if current.deployment_settings.get_security_archive_not_delete() and \
            DELETED in table:
 
-            # Find all deletable rows
+            # Find all references
+            if not cascade:
+                # Must load all models to detect dependencies
+                s3db.load_all_models()
+            if db._lazy_tables:
+                # Must roll out all lazy tables to detect dependencies
+                for tn in db._LAZY_TABLES.keys():
+                    db[tn]
             references = table._referenced_by
             try:
                 rfields = [f for f in references if f.ondelete == "RESTRICT"]
@@ -750,6 +756,7 @@ class S3Resource(object):
                                                     unapproved=True)
                         rresource.delete(cascade=True)
                         if rresource.error:
+                            self.error = rresource.error
                             break
                     elif rfield.ondelete == "SET NULL":
                         try:
@@ -1703,7 +1710,7 @@ class S3Resource(object):
                             after this datetime
             @param fields: data fields to include (default: all)
             @param dereference: include referenced resources
-            @param maxdepth: 
+            @param maxdepth:
             @param mcomponents: components of the master resource to
                                 include (list of tablenames), empty list
                                 for all
@@ -1824,7 +1831,7 @@ class S3Resource(object):
             @param fields: data fields to include (default: all)
             @param references: foreign keys to include (default: all)
             @param dereference: also export referenced records
-            @param maxdepth: 
+            @param maxdepth:
             @param mcomponents: components of the master resource to
                                 include (list of tablenames), empty list
                                 for all
@@ -1835,7 +1842,7 @@ class S3Resource(object):
                             {tablename: {url_var: string}}
             @param maxbounds: include lat/lon boundaries in the top
                               level element (off by default)
-            @param xmlformat: 
+            @param xmlformat:
             @param location_data: dictionary of location data which has been
                                   looked-up in bulk ready for xml.gis_encode()
             @param map_data: dictionary of options which can be read by the map
@@ -2128,7 +2135,7 @@ class S3Resource(object):
             @param base_url: the base URL of the resource
             @param reference_map: the reference map of the request
             @param export_map: the export map of the request
-            @param lazy: 
+            @param lazy:
             @param components: list of components to include from referenced
                                resources (tablenames)
             @param filters: additional URL filters (Sync), as dict
@@ -2136,7 +2143,7 @@ class S3Resource(object):
             @param msince: the minimum update datetime for exported records
             @param master: True of this is the master resource
             @param location_data: the location_data for GIS encoding
-            @param xmlformat: 
+            @param xmlformat:
         """
 
         xml = current.xml
@@ -3707,7 +3714,7 @@ class S3Resource(object):
                 try:
                     rfield = rfields[iSortCol]
                 except KeyError:
-                    # iSortCol specifies a non-existent column, i.e. 
+                    # iSortCol specifies a non-existent column, i.e.
                     # iSortCol_x>=numcols => ignore
                     columns.append(Storage(field=None))
                 else:

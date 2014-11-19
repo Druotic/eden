@@ -78,6 +78,7 @@ class S3DocumentLibrary(S3Model):
                                cr_shelter=T("Shelter"),
                                deploy_mission=T("Mission"),
                                doc_sitrep=T("Situation Report"),
+                               event_incident=T("Incident"),
                                event_incident_report=T("Incident Report"),
                                hms_hospital=T("Hospital"),
                                hrm_human_resource=T("Human Resource"),
@@ -351,9 +352,6 @@ class S3DocumentLibrary(S3Model):
     @staticmethod
     def document_duplicate(item):
         """ Import item de-duplication """
-
-        if item.tablename not in ("doc_document", "doc_image"):
-            return
 
         data = item.data
         query = None

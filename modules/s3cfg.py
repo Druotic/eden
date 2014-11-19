@@ -84,6 +84,7 @@ class S3Config(Storage):
                     "sv": "%Y-%m-%d",
                     "ta": "%d/%m/%Y",
                     #"tet": "",
+                    "th": "%d/%m/%Y",
                     #"tl": "",
                     #"ur": "",
                     "vi": "%d/%m/%Y",
@@ -798,8 +799,9 @@ class S3Config(Storage):
     def get_gis_config_screenshot(self):
         """
             Should GIS configs save a screenshot when saved?
+            - set the size if True: (width, height)
         """
-        return self.gis.get("config_screenshot", False)
+        return self.gis.get("config_screenshot", None)
 
     def get_gis_countries(self):
         """
@@ -1146,6 +1148,7 @@ class S3Config(Storage):
                                                        ("ru", "русский"),
                                                        #("si", "සිංහල"),                # Sinhala
                                                        #("ta", "தமிழ்"),               # Tamil
+                                                       #("th", "ภาษาไทย"),        # Thai
                                                        ("tl", "Tagalog"),
                                                        ("ur", "اردو"),
                                                        ("vi", "Tiếng Việt"),
@@ -1460,6 +1463,34 @@ class S3Config(Storage):
         """ UN-style deployment? """
         return self.ui.get("cluster", False)
 
+    def get_ui_label_locationselector_map_point_add(self):
+        """
+            Label for the Location Selector button to add a Point to the Map
+            e.g. 'Place on Map'
+        """
+        return current.T(self.ui.get("label_locationselector_map_point_add", "Place on Map"))
+
+    def get_ui_label_locationselector_map_point_view(self):
+        """
+            Label for the Location Selector button to view a Point on the Map
+            e.g. 'View on Map'
+        """
+        return current.T(self.ui.get("label_locationselector_map_point_view", "View on Map"))
+
+    def get_ui_label_locationselector_map_polygon_add(self):
+        """
+            Label for the Location Selector button to draw a Polygon on the Map
+            e.g. 'Draw on Map'
+        """
+        return current.T(self.ui.get("label_locationselector_map_polygon_add", "Draw on Map"))
+
+    def get_ui_label_locationselector_map_polygon_view(self):
+        """
+            Label for the Location Selector button to view a Polygon on the Map
+            e.g. 'View on Map'
+        """
+        return current.T(self.ui.get("label_locationselector_map_polygon_view", "View on Map"))
+
     def get_ui_label_mobile_phone(self):
         """
             Label for the Mobile Phone field
@@ -1496,6 +1527,11 @@ class S3Config(Storage):
         """
             Whether all dropdowns should use the S3MultiSelectWidget
             - currently respected by Auth Registration & S3LocationSelectorWidget2
+
+            Options:
+                False (default): No widget
+                True: Widget, with no header
+                "search": Widget with the search header
         """
         return self.ui.get("multiselect_widget", False)
 
@@ -1607,6 +1643,26 @@ class S3Config(Storage):
                                                    icons = False,
                                                    stripes = True,
                                                    ))
+
+    def get_ui_inline_component_layout(self):
+        """
+            Layout for S3SQLInlineComponent
+        """
+        # Use this to also catch old-style classes (not recommended):
+        #import types
+        #elif isinstance(layout, (type, types.ClassType)):
+
+        layout = self.ui.get("inline_component_layout")
+        if not layout:
+            from s3 import S3SQLSubFormLayout
+            layout = S3SQLSubFormLayout()
+        elif isinstance(layout, type):
+            # Instantiate only now when it's actually requested
+            # (because it may inject JS which is not needed if unused)
+            layout = layout()
+        # Replace so it doesn't get instantiated twice
+        self.ui.inline_component_layout = layout
+        return layout
 
     # =========================================================================
     # Messaging
@@ -2673,11 +2729,11 @@ class S3Config(Storage):
         """
         return self.pr.get("show_emergency_contacts", True)
 
-    def get_pr_public_private_contacts(self):
+    def get_pr_contacts_tabs(self):
         """
-            have 2 Tabs for contacts: Public & Private
+            Which tabs to show for contacts: all, public &/or private
         """
-        return self.pr.get("public_private_contacts", False)
+        return self.pr.get("contacts_tabs", ("all",))
 
     # -------------------------------------------------------------------------
     # Proc
