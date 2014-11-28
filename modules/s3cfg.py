@@ -582,7 +582,7 @@ class S3Config(Storage):
     def get_chatdb_string(self):
         chat_server = self.base.get("chat_server", False)
         db_get = self.database.get
-        
+
         if (chat_server["server_db_type"] == "mysql"):
             db_string = "mysql://%s:%s@%s:%s/%s" % \
             (chat_server["server_db_username"] if chat_server["server_db_username"] else db_get("username", "sahana"),
@@ -1321,6 +1321,18 @@ class S3Config(Storage):
         else:
             return setting
 
+    def get_ui_report_formstyle(self):
+        """ Get the current report form style """
+
+        setting = self.ui.get("report_formstyle", None)
+        formstyles = self.FORMSTYLE
+        if callable(setting):
+            return setting
+        elif setting in formstyles:
+            return formstyles[setting]
+        else:
+            return setting
+
     def get_ui_inline_formstyle(self):
         """ Get the _inline formstyle for the current formstyle """
 
@@ -1371,7 +1383,7 @@ class S3Config(Storage):
             create/update forms
         """
         return self.ui.get("default_cancel_button", False)
-        
+
     def get_ui_filter_clear(self):
         """
             Whether to show a clear button in default FilterForms
@@ -1386,14 +1398,14 @@ class S3Config(Storage):
             - "foundation"
         """
         return self.ui.get("icons", "font-awesome")
-        
+
     def get_ui_custom_icons(self):
         """
             Custom icon CSS classes, a dict {abstract name: CSS class},
             can be used to partially override standard icons
         """
         return self.ui.get("custom_icons", None)
-        
+
     def get_ui_icon_layout(self):
         """
             Callable to render icon HTML, which takes an ICON instance
@@ -2031,7 +2043,7 @@ class S3Config(Storage):
         if not self.get_cr_shelter_people_registration():
             return False
         return self.cr.get("shelter_population_dynamic", False)
-    
+
     def get_cr_shelter_people_registration(self):
         """
             Disable functionality to track individuals in shelters
@@ -2204,6 +2216,13 @@ class S3Config(Storage):
         """
         return self.hrm.get("show_staff", True)
 
+    def get_hrm_site_contact_unique(self):
+        """
+            Whether there can be multiple site contacts per site
+            - disable this if needing a separate contact per sector
+        """
+        return self.hrm.get("site_contact_unique", True)
+
     def get_hrm_skill_types(self):
         """
             If set to True then Skill Types are exposed to the UI
@@ -2219,7 +2238,7 @@ class S3Config(Storage):
             - options are: False, "experience"
         """
         return self.hrm.get("staff_experience", "experience")
-        
+
     def get_hrm_salary(self):
         """
             Whether to track salaries of staff
@@ -3100,7 +3119,7 @@ class S3Config(Storage):
         """
             Template-specific frontpage configuration options
         """
-        
+
         if key:
             return self.frontpage.get(key, default)
         else:

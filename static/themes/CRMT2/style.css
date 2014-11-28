@@ -327,6 +327,91 @@ aside .form-container input[type=radio] + label:before {
     width: auto;
 }
 
+/* Apply theme styles for multiselect to the right selector */
+.ui-multiselect {
+    -webkit-appearance: none !important;
+    -webkit-border-radius: 0px;
+    background-color: #FAFAFA;
+    background-position: 100% center;
+    background-repeat: no-repeat;
+    border: 1px solid #cccccc;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+    font-family: Lato, "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif;
+    color: rgba(0, 0, 0, 0.75);
+    line-height: normal;
+    border-radius: 0;
+    height: 2.3125rem;
+    display: block;
+    text-align: left;
+}
+/* Force multiselect button to adapt to grid */
+.columns > .ui-multiselect {
+    width: 100% !important;
+}
+/* Restore textarea resizability in forms (override ext-all-notheme.css) */
+.form-row textarea {
+    resize: both;
+}
+/* Add some spacing between submit buttons */
+.form-row .button {
+    margin-right: 0.175rem;
+}
+
+/* Style adjustments for slick slider */
+.slick-prev,
+.slick-next {
+    width: 2.5rem;
+    height: 2.5rem;
+}
+.slick-prev {
+    left: -25%;
+}
+.slick-next {
+    right: -25%;
+}
+.slick-prev:before,
+.slick-next:before {
+    font-family: "foundation-icons";
+    font-size: 2.5rem;
+    padding-right: 5px;
+    padding-left: 5px;
+    background-color: #04A4A4;
+    color: white;
+    border-radius: 100%;
+    opacity:1;
+}
+.slick-prev:hover:before,
+.slick-next:hover:before {
+    background-color: #37518B;
+}
+.slick-prev:before { 
+    content: "\f10a"; 
+}
+.slick-next:before { 
+    content: "\f10b"; 
+}
+.slick-dots {
+    position:static;
+    margin-top:20px;
+    margin-left:0;
+}
+.slick-dots li button:before {
+    font-size: 0.7rem;
+    opacity: 1;
+    color: #37518B;
+}
+.slick-slide,
+.slick-dots li.slick-active button:before {
+    color: #EEEEEE;
+}
+.slick-slide {
+    color: #EEEEEE;
+}
+.slick-slide img {
+    border: 5px solid white;
+}
+
 /* END */
 
 .row .row {
