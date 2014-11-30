@@ -404,7 +404,8 @@ class S3Task(object):
             from time import sleep
             rt = RepeatedTimer(1, self.check_status,
                                log_name, record.id,
-                               self.scheduler, task)
+                               self.scheduler, task,
+                               current.request.folder)
             try:
                 '''
                 While the task is running..? What if it
@@ -419,7 +420,8 @@ class S3Task(object):
 
     #--------------------------------------------------------------------------
     def check_status(user_id, log_name, task_id, scheduler, task_name):
-        log_path = "/home/dev/web2py/applications/eden/logs/tasks/"
+        import os
+        log_path = os.path.join(folder, "logs", "tasks")
         from gluon import DAL, Field
         db = DAL('sqlite://storage.db',
                  folder='applications/eden/databases',
@@ -428,7 +430,7 @@ class S3Task(object):
         table = db.scheduler_task
         query = (table.id == task_id)
         task_status = db(query).select(table.status).first().status
-
+        
         '''
         Ideally, we could use this to gather information
         on the task, but the web2py scheduler is throwing
@@ -436,14 +438,13 @@ class S3Task(object):
         Probably because this is in a separate thread that
         can't access the DAL :(
         '''
-        # task_status = scheduler.task_status(task_id, output=True)
-        # print task_status
+        #task_status = scheduler.task_status(task_id, output=True)
+        #print task_status
 
-        import os
         if not os.path.exists(log_path):
             os.makedirs(log_path)
 
-        with open(log_path + log_name, "a+") as log:
+        with open(os.path.join(log_path, log_name), "a+") as log:
             log.write('%s is currently in the %s state\n'
                       % (task_name, task_status))
 
