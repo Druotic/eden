@@ -12,7 +12,6 @@ if not settings.has_module(module):
 
 def index():
     """ Show the index """
-    s3.scripts.append("/%s/static/scripts/ui/progressbar.js" % appname)
     return dict()
 
 # -----------------------------------------------------------------------------
