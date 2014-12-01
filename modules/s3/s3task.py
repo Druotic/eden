@@ -391,13 +391,8 @@ class S3Task(object):
             vars["user_id"] = auth.user.id
 
         # Add to DB for pickup by Scheduler task
-        db = current.db
-        record = db.scheduler_task.insert(application_name="%s/default" % current.request.application,
-                                          task_name=task,
-                                          function_name=function_name,
-                                          args=json.dumps(args),
-                                          vars=json.dumps(vars),
-                                          **kwargs)
+        record = self.scheduler.queue_task(task, args, vars)
+        
         if report_progress:
             log_name = datetime.datetime.now() \
                 .strftime("%y-%m-%d-%H-%M") + "_" + task + ".txt"
@@ -430,7 +425,6 @@ class S3Task(object):
         table = db.scheduler_task
         query = (table.id == task_id)
         task_status = db(query).select(table.status).first().status
-        
         '''
         Ideally, we could use this to gather information
         on the task, but the web2py scheduler is throwing
