@@ -391,8 +391,10 @@ class S3Task(object):
             vars["user_id"] = auth.user.id
 
         # Add to DB for pickup by Scheduler task
-        record = self.scheduler.queue_task(task, args, vars)
-        
+        record = self.scheduler.queue_task(task,
+                                           args,
+                                           vars,
+                                           sync_output=sync_output)
         if report_progress:
             log_name = datetime.datetime.now() \
                 .strftime("%y-%m-%d-%H-%M") + "_" + task + ".txt"
@@ -408,32 +410,45 @@ class S3Task(object):
                 Every second for 10 seconds, check
                 the task's status
                 '''
-                sleep(10)
+                sleep(15)
             finally:
                 rt.stop()
         return record
 
     #--------------------------------------------------------------------------
-    def check_status(user_id, log_name, task_id, scheduler, task_name):
+    def check_status(user_id, log_name, task_id, scheduler, task_name, folder):
         import os
         log_path = os.path.join(folder, "logs", "tasks")
         from gluon import DAL, Field
+        '''
+        If we use current.db here instead of getting a
+        new handle to the db, the task that we
+        previously queued won't get inserted into the db
+        so every call we make in this method to check
+        on the task's status will always result in the task being in
+        the 'QUEUED' state.
+        '''
         db = DAL('sqlite://storage.db',
                  folder='applications/eden/databases',
                  auto_import=True)
-
         table = db.scheduler_task
         query = (table.id == task_id)
-        task_status = db(query).select(table.status).first().status
+        task_status = None
+        try:
+            task_status = db(query).select(table.status).first().status
+        except AttributeError:
+            task_status = 'Unknown (task not yet in db)'
+
         '''
-        Ideally, we could use this to gather information
-        on the task, but the web2py scheduler is throwing
-        a "cannot import name Query" module for some reason...
-        Probably because this is in a separate thread that
-        can't access the DAL :(
+        This is the preferred way to check a task's status since
+        it's using the web2py API, but we can't use this
+        because the scheduler is pointing to
+        current.db (see above comment):
+        task_status = scheduler.task_status(task_id, output=True)
+        print task_status.scheduler_task.status
+        print task_status.result
+        print task_status.scheduler_run.run_output
         '''
-        #task_status = scheduler.task_status(task_id, output=True)
-        #print task_status
 
         if not os.path.exists(log_path):
             os.makedirs(log_path)
