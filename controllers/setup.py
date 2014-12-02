@@ -234,3 +234,4 @@ def schedule_test_task():
                                  sync_output=2,
                                  report_progress=True)
     current.session.flash = T("Task queued in scheduler")
+    redirect('index')
