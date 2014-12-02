@@ -257,8 +257,9 @@ OpenLayers.ProxyHost = S3.Ap.concat('/gis/proxy?url=');
         var inset = 0.007;
         lon_min -= inset;
         lon_max += inset;
-        lat_min -= inset;
-        lat_max += inset;
+        // @todo: -90 > lat > 90 doesn't give valid bounds (returns NaN)
+        lat_min = Math.max(lat_min - inset, -90.0);
+        lat_max = Math.min(lat_max + inset, 90.0);
         bounds = new OpenLayers.Bounds(lon_min, lat_min, lon_max, lat_max);
         bounds.transform(proj4326, map.getProjectionObject());
         // Zoom to Bounds
@@ -5829,6 +5830,9 @@ OpenLayers.ProxyHost = S3.Ap.concat('/gis/proxy?url=');
             fillColor: '${fill}',
             fillOpacity: '${fillOpacity}',
             strokeColor: '${stroke}',
+            strokeDashstyle: '${strokeDashstyle}',
+            // @ToDo:
+            //strokeLinecap: '${strokeLinecap}',
             strokeWidth: '${strokeWidth}',
             strokeOpacity: '${strokeOpacity}',
             graphicHeight: '${graphicHeight}',
@@ -6131,6 +6135,24 @@ OpenLayers.ProxyHost = S3.Ap.concat('/gis/proxy?url=');
                     // default to layer's opacity
                     return strokeOpacity || opacity;
                 },
+                strokeDashstyle: function(feature) {
+                    var dashStyle;
+                    // if (feature.attributes.strokeDashstyle) {
+                    //    // Use strokeDashstyle from feature (e.g. FeatureQuery)
+                    //    width = feature.attributes.strokeDashstyle;
+                    //} else if (style) {
+                    if (style) {
+                        if (!style_array) {
+                            // Common Style for all features in layer
+                            dashStyle = style.strokeDashstyle;
+                        } else {
+                            // Lookup from rule
+                            // - done within OpenLayers.Rule
+                        }
+                    }
+                    // Defalt dashStyle is 'solid'
+                    return dashStyle || 'solid';
+                },
                 strokeWidth: function(feature) {
                     // default strokeWidth
                     var width = 2;
@@ -6219,9 +6241,10 @@ OpenLayers.ProxyHost = S3.Ap.concat('/gis/proxy?url=');
         // @ToDo: Allow customisation of the Select Style
         if (opacity != 1) {
             // Simply make ~opaque onSelect
+            var selectOpacity = Math.min(opacity * 2, 0.8);
             var selectStyle = {
-                fillOpacity: 0.8,
-                graphicOpacity: 0.8
+                fillOpacity: selectOpacity,
+                graphicOpacity: selectOpacity
             };
         } else {
             // Change colour onSelect
@@ -6360,6 +6383,11 @@ OpenLayers.ProxyHost = S3.Ap.concat('/gis/proxy?url=');
                 symbolizer.zIndex = 5;
                 // Hint to the Legend
                 symbolizer.Line = symbolizer;
+                if (undefined != elem.strokeDashstyle) {
+                    symbolizer.strokeDashstyle = elem.strokeDashstyle;
+                }
+                // @ToDo:
+                //symbolizer.strokeLinecap
             } else {
                 // Polygon: default
                 //symbolizer.graphicZIndex = 0;
