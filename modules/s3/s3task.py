@@ -454,8 +454,8 @@ class S3Task(object):
             os.makedirs(log_path)
 
         with open(os.path.join(log_path, log_name), "a+") as log:
-            log.write('%s is currently in the %s state\n'
-                      % (task_name, task_status))
+            log.write('<%s>: %s is currently in the %s state\n'
+                      % (datetime.datetime.now(), task_name, task_status))
 
     # -------------------------------------------------------------------------
     def _duplicate_task_exists(self, task, args, vars):
