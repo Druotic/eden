@@ -438,7 +438,7 @@ class S3Task(object):
             task_status = db(query).select(table.status).first().status
         except AttributeError:
             task_status = 'Unknown (task not yet in db)'
-
+            
         '''
         This is the preferred way to check a task's status since
         it's using the web2py API, but we can't use this
